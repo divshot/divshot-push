@@ -1,0 +1,31 @@
+{
+  "name": "divshot-push",
+  "version": "1.0.0",
+  "description": "Deploy files to the Divshot hosting platform",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "mocha test/ --recursive"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/divshot/divshot-push.git"
+  },
+  "keywords": [
+    "divshot",
+    "push",
+    "deploy"
+  ],
+  "author": "Divshot",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/divshot/divshot-push/issues"
+  },
+  "homepage": "https://github.com/divshot/divshot-push",
+  "devDependencies": {
+    "chai": "^1.9.2",
+    "mocha": "^2.0.1"
+  }
+}
