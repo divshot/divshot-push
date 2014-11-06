@@ -26,6 +26,26 @@
   "homepage": "https://github.com/divshot/divshot-push",
   "devDependencies": {
     "chai": "^1.9.2",
+    "jshint": "^2.5.10",
     "mocha": "^2.0.1"
+  },
+  "dependencies": {
+    "ask": "^1.1.0",
+    "async": "^0.9.0",
+    "aws-sdk": "^2.0.23",
+    "chalk": "^0.5.1",
+    "fs-extra": "^0.12.0",
+    "glob": "^4.0.6",
+    "globby": "^0.1.1",
+    "graceful-fs": "^3.0.4",
+    "join-path": "^1.0.0",
+    "lodash": "^2.4.1",
+    "merkle-dir": "git://github.com/divshot/merkle-dir",
+    "mkdirp": "^0.5.0",
+    "progress": "^1.1.8",
+    "retry": "^0.6.1",
+    "slash": "^1.0.0",
+    "tmp": "0.0.24",
+    "touch": "0.0.3"
   }
 }
