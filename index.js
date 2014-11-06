@@ -17,102 +17,118 @@ var DIVSHOT_API_HOST = 'https://api.divshot.com';
 
 module.exports = function push (options, done) {
   
-  // Set up optiosn
+  var status = new EventEmitter();
+  
+  // Set up options
   var environment = options.environment || 'development';
   var config = options.config;
   var token = options.token;
+  var timeout = options.timeout;
   var appConfigRootPath = (config.root && config.root === '/') ? './' : config.root;
   var appRootDir = path.resolve(process.cwd(), appConfigRootPath);
-  var apiHost = (options.origin) ? options.origin.host || DIVSHOT_API_HOST : DIVSHOT_API_HOST;
+  var apiHost = (options.hosting) ? options.hosting.api.host || DIVSHOT_API_HOST : DIVSHOT_API_HOST;
+  var apiVersion = (options.hosting) ? options.hosting.api.version || DIVSHOT_API_VERSION : DIVSHOT_API_VERSION;
   
   // Set up api calls
   var api = ask({
     origin: apiHost,
     headers: {
       'Authorization': 'Bearer ' + token,
-      'Accept-Version': DIVSHOT_API_VERSION
+      'Accept-Version': apiVersion
     }
   });
   
-  if (!fs.existsSync(appRootDir)) {
-    return done(new Error('directory does not exist'));
-  }
+  var createApp = api.post('apps')
   
-  if (environment === 'production') {
-    console.log('\n' + format.yellow('Note:') + ' Deploying to production purges your application\'s CDN cache, which may take up to one minute.\n');
-  }
+  process.nextTick(function () {
+    beginDeploy(config);
+  });
   
-  process.stdout.write('Creating build ... ');
+  // if (!fs.existsSync(appRootDir)) {
+  //   // return status.emit('error', 'directory does not exist');
+  //   return done(new Error('directory does not exist'));
+  // }
   
-  // Start deployment process
-  deploy(config);
+  // if (environment === 'production') {
+  //   // status.emit('data', '\n' + format.yellow('Note:') + ' Deploying to production purges your application\'s CDN cache, which may take up to one minute.\n');
+  //   console.log('\n' + format.yellow('Note:') + ' Deploying to production purges your application\'s CDN cache, which may take up to one minute.\n');
+  // }
   
-  function createAppBeforeBuild (config) {
+  // status.emit('data', 'Creating build ... ');
+  // // process.stdout.write('Creating build ... ');
+  
+  // // Start deployment process
+  // deploy(config);
+  
+  function beginDeploy (config) {
     
-    console.log('');
-    process.stdout.write('App does not yet exist. Creating app ' + format.bold(config.name) + ' ... ');
+    if (!fs.existsSync(appRootDir)) {
+      return status.emit('error', 'directory does not exist');
+    }
     
-    cli.api.apps.create(config.name.toLowerCase(), function (err, response, body) {
-      
-      if (err) return onError(err);
-      if (response.error === 'invalid_token') return done(cli.errors.NOT_AUTHENTICATED);
-      if (body.error) return onError(body);
-      if (response.statusCode >= 400) return onError(body);
-
-      deploy(config);
-    });
+    if (environment === 'production') {
+      status.emit('data', '\n' + format.yellow('Note:') + ' Deploying to production purges your application\'s CDN cache, which may take up to one minute.\n');
+    }
+    
+    status.emit('data', 'Creating build ... ');
+    
+    // Start deployment process
+    deploy(config);
   }
   
   function deploy (config) {
     
     var createBuild = api.post('apps', config.name, 'builds');
     
-    createBuild({
-      config: config
-    })
+    createBuild({config: config})
       .then(function (res) {
         
-        console.log('THEN');
-        console.log(res.body);
+        var build = res.body;
+        
+        // Any other error
+        if (build.status) {
+          return done(res.body.error);
+        }
+        
+        // Does this user have access to this app?
+        if (build.error) {
+          return done(res.body.error);
+        }
+        
+        // Unexptected error
+        if (!build.loadpoint) {
+          console.log('Unexpected build data.');
+          console.log(format.red.underline('====== Build Data Start ======'));
+          console.log(JSON.stringify(build, null, 4));
+          console.log(format.red.underline('====== Build Data End ======'));
+          console.log();
+          return done('Contact support@divshot.com with this data for diagnostic purposes.');
+        }
+        
+        console.log(format.green('✔'));
+        console.log('');
+        
+        beginUpload(config, build);
       })
       .catch(function (err) {
         
-        console.log('CATCH');
-        console.log(err.body);
+        // App doesn't exist yet, create it first
+        if (err.statusCode === 404) {
+          return createAppBeforeBuild(config);
+        }
+        
+        if (err.statusCode === 401) {
+          return done(err.body.error);
+        }
+        
+        done((err.body) ? err.body.error: err);
       });
     
-    return;
     
     // 4. Copy files (minus exclusions) to a tmp dir
     
-    cli.api.apps.id(config.name).builds.create({config: config}, function(err, build){
+    function beginUpload (config, build) {
       
-      if (err) return onError(err);
-      
-      // App doesn't exist, create it
-      if (build && build.status == 404) return createAppBeforeBuild(config);
-      
-      // Not allowed
-      if (build && build.status == 401) return onError(build);
-      
-      // Any other error
-      if (build && build.status) return onError(err);
-      
-      // Does this user have access to this app?
-      if (build && build.error) return onError(build);
-      
-      if (!build.loadpoint) {
-        console.log('Unexpected build data.');
-        console.log(format.red.underline('====== Build Data Start ======'));
-        console.log(JSON.stringify(build, null, 4));
-        console.log(format.red.underline('====== Build Data End ======'));
-        console.log();
-        return done('Contact support@divshot.com with this data for diagnostic purposes.');
-      }
-
-      console.log(format.green('✔'));
-      console.log('');
-     
       tmp.dir({unsafeCleanup: true}, function(err, tmpDir) {
         
         async.map(filesToUpload(appRootDir, config.exclude), function(src, callback){
@@ -141,7 +157,7 @@ module.exports = function push (options, done) {
               sessionToken: authorization.token,
               region: 'us-east-1',
               httpOptions: {
-                timeout: cli.timeout
+                timeout: timeout
               }
             },
             directory: [tmpDir, build.id].join('/'),
@@ -232,44 +248,66 @@ module.exports = function push (options, done) {
             
             console.log(format.green('Synced!'));
             verbose('inodeCount: ' + inodeCount, 'visitedCount: ' + visitedCount);
-
-            var buildApi = cli.api.apps.id(config.name).builds.id(build.id);
+            
+            
+            var finalizeBuild = api.put(
+              'apps',
+              config.name.toLowerCase(),
+              'builds',
+              build.id,
+              'finalize'
+            );
+            
+            var releaseBuild = api.post(
+              'apps',
+              config.name.toLowerCase(),
+              'releases',
+              environment
+            );
             
             console.log('');
             process.stdout.write('Finalizing build ... ');
-
-            var url = buildApi.url() + '/finalize';
-
-            buildApi.http.request(url, 'PUT', {json:{file_map: fileMap}}, function (err, response) {
-              
-              if (err) return onError(err);
-              if (response.statusCode < 200 || response.statusCode >= 300) {
-                var res = {};
-
-                try {res = JSON.parse(response.body);}
-                catch (e) {}
+            
+            finalizeBuild({file_map: fileMap})
+              .then(function (res) {
                 
-                console.log();
-                return onError(error);
-              }
-
-              console.log(format.green('✔'));
-              process.stdout.write('Releasing build to ' + format.bold(environment) + ' ... ');
-
-              buildApi.release(environment, function (err, response) {
+                console.log(format.green('✔'));
+                process.stdout.write('Releasing build to ' + format.bold(environment) + ' ... ');
                 
-                if (err) return onError(err);
+                return releaseBuild({build: build.id})
+              })
+              .then(function (res) {
                 
                 console.log(format.green('✔'));
                 
-                return onPushed();
+                onPushed();
+              })
+              .catch(function (err) {
+                
+                done((err.body) ? err.body.error: err);
               });
-            });
-
           });
         });
       });
-    });
+    }
+  }
+  
+  function createAppBeforeBuild (config) {
+    
+    // status.emit('data', '\n');
+    console.log('');
+    // status.emit('data', 'App does not yet exist. Creating app ' + format.bold(config.name) + ' ... ');
+    process.stdout.write('App does not yet exist. Creating app ' + format.bold(config.name) + ' ... ');
+    
+    createApp({name: config.name.toLowerCase()})
+      .then(function (res) {
+        
+        deploy(config);
+      })
+      .catch(function (err) {
+        
+        done((err.body) ? err.body.error: err);
+      });
   }
   
   function filesToUpload (appRootDir, filesToExclude) {
@@ -304,13 +342,14 @@ module.exports = function push (options, done) {
 
   function onPushed () {
     
+    // TODO: should not hard code this
     var appUrl = (environment === 'production') 
       ? 'http://' + config.name + '.divshot.io'
       : 'http://' + environment + '.' + config.name + '.divshot.io';
     
     console.log('');
-    console.log('Application deployed to ' + format.bold.white(environment), {success: true});
-    console.log('You can view your app at: ' + format.bold(appUrl), {success: true});
+    console.log('Application deployed to ' + format.bold.white(environment));
+    console.log('You can view your app at: ' + format.bold(appUrl));
     
     done(null, appUrl);
   }
@@ -321,8 +360,11 @@ module.exports = function push (options, done) {
     
     if (_.isObject(err)) errorMessage = err.error;
     
-    console.log();
+    console.log('');
     
     done(errorMessage);
   }
+  
+  // Return event emitter
+  return status;
 };
