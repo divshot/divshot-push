@@ -14,7 +14,7 @@ var ask = require('ask');
 var DIVSHOT_API_VERSION = '0.5.0';
 var DIVSHOT_API_HOST = 'https://api.divshot.com';
 
-module.exports = function push (options, done) {
+module.exports = function push (options) {
   
   var status = new EventEmitter();
   
