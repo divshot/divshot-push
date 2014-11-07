@@ -1,8 +1,8 @@
 var fs = require('fs-extra');
 var path = require('path');
 var EventEmitter = require('events').EventEmitter;
+var assert = require('assert');
 var format = require('chalk');
-var _ = require('lodash');
 var glob = require('glob');
 var async = require('async');
 var tmp = require('tmp');
@@ -10,21 +10,28 @@ var globby = require('globby');
 var join = require('join-path');
 var syncTree = require('./lib/sync-tree');
 var ask = require('ask');
+var asArray = require('as-array');
 
 var DIVSHOT_API_VERSION = '0.5.0';
 var DIVSHOT_API_HOST = 'https://api.divshot.com';
+var DEFAULT_ENVIRONMENT = 'development';
 
 module.exports = function push (options) {
   
+  // Set up status events
   var status = new EventEmitter();
   
+  // Ensure required data
+  assert.ok(options.config, '[divshot-push]: Application configuration data is required');
+  assert.ok(options.token, '[divshot-push]: User authentication token is required');
+  
   // Set up options
-  var environment = options.environment || 'development';
+  var environment = options.environment || DEFAULT_ENVIRONMENT;
   var config = options.config;
   var token = options.token;
   var timeout = options.timeout;
   var appConfigRootPath = (config.root && config.root === '/') ? './' : config.root;
-  var appRootDir = path.resolve(process.cwd(), appConfigRootPath);
+  var appRootDir = path.resolve(options.root || '/', appConfigRootPath);
   var apiHost = (options.hosting) ? options.hosting.api.host || DIVSHOT_API_HOST : DIVSHOT_API_HOST;
   var apiVersion = (options.hosting) ? options.hosting.api.version || DIVSHOT_API_VERSION : DIVSHOT_API_VERSION;
   
@@ -42,10 +49,10 @@ module.exports = function push (options) {
   // Use nextTick because we need to listen for events
   // outside the module before we start emitting the events
   process.nextTick(function () {
-    beginDeploy(config);
+    startDeploy(config);
   });
   
-  function beginDeploy (config) {
+  function startDeploy (config) {
     
     if (!fs.existsSync(appRootDir)) {
       return status.emit('error', 'directory does not exist');
@@ -89,7 +96,7 @@ module.exports = function push (options) {
         status.emit('data', format.green('✔'));
         status.emit('data', '');
         
-        beginUpload(config, build);
+        startUpload(config, build);
       })
       .catch(function (err) {
         
@@ -108,7 +115,7 @@ module.exports = function push (options) {
     
     // 4. Copy files (minus exclusions) to a tmp dir
     
-    function beginUpload (config, build) {
+    function startUpload (config, build) {
       
       tmp.dir({unsafeCleanup: true}, function(err, tmpDir) {
         
@@ -146,13 +153,6 @@ module.exports = function push (options) {
             prefix: build.application_id
           });
 
-          var inodeCount;
-          var visitedCount = 0;
-
-          function verbose() {
-            // console.log.apply(console, arguments);
-          }
-
           status.emit('data', 'Hashing Directory Contents ...');
           
           sync.on('inodecount', function(count) {
@@ -164,40 +164,37 @@ module.exports = function push (options) {
           sync.on('notfound', function(path, hash) {
             
             status.emit('notfound');
-            // verbose(format.red('404 ') + path);
+            verbose(format.red('404 ') + path);
           });
 
           sync.on('found', function(path, hash, count) {
             
             status.emit('file:found', count);
-            
-            // verbose(format.green('200 ') + path)
+            verbose(format.green('200 ') + path)
           });
 
           sync.on('cachestart', function(path, hash) {
             
             status.emit('file:cachestart');
-            // verbose(format.blue('PUT ') + path)
+            verbose(format.blue('PUT ') + path)
           });
 
           sync.on('cachesuccess', function(path, hash, count) {
             
             status.emit('file:cachesuccess');
-            
-            // verbose(format.green('201 ') + path);
+            verbose(format.green('201 ') + path);
           });
 
           sync.on('uploadstart', function(path, hash) {
             
-            // verbose(format.blue('PUT ') + path);
             status.emit('upload:start');
+            verbose(format.blue('PUT ') + path);
           });
 
           sync.on('uploadsuccess', function(path, hash) {
             
             status.emit('upload:success');
-            
-            // verbose(format.green('201 ') + path);
+            verbose(format.green('201 ') + path);
           });
 
           sync.on('uploadfailure', function(err) {
@@ -212,13 +209,10 @@ module.exports = function push (options) {
 
           sync.on('error', function(err) {
             
-            // status.emit('data', '');
             status.emit('error', err);
           });
 
           sync.on('synced', function(fileMap) {
-            
-            // verbose('inodeCount: ' + inodeCount, 'visitedCount: ' + visitedCount);
             
             var finalizeBuild = api.put(
               'apps',
@@ -250,7 +244,16 @@ module.exports = function push (options) {
                 
                 status.emit('', format.green('✔'));
                 
-                onPushed();
+                // TODO: should not hard code this
+                var appUrl = (environment === 'production') 
+                  ? 'http://' + config.name + '.divshot.io'
+                  : 'http://' + environment + '.' + config.name + '.divshot.io';
+                
+                status.emit('data', '');
+                status.emit('data', 'Application deployed to ' + format.bold.white(environment));
+                status.emit('data', 'You can view your app at: ' + format.bold(appUrl));
+                
+                status.emit('done', appUrl);
               })
               .catch(function (err) {
                 
@@ -307,19 +310,10 @@ module.exports = function push (options) {
     return fs.existsSync(pathname)
       && fs.statSync(pathname).isDirectory();
   }
-
-  function onPushed () {
-    
-    // TODO: should not hard code this
-    var appUrl = (environment === 'production') 
-      ? 'http://' + config.name + '.divshot.io'
-      : 'http://' + environment + '.' + config.name + '.divshot.io';
-    
-    status.emit('data', '');
-    status.emit('data', 'Application deployed to ' + format.bold.white(environment));
-    status.emit('data', 'You can view your app at: ' + format.bold(appUrl));
-    
-    status.emit('done', appUrl);
+  
+  // Handle verbose data for debugging
+  function verbose() {
+    status.emit('verbose', asArray(arguments));
   }
   
   // Return event emitter
