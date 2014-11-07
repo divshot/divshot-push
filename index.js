@@ -6,7 +6,6 @@ var _ = require('lodash');
 var glob = require('glob');
 var async = require('async');
 var tmp = require('tmp');
-var ProgressBar = require('progress');
 var globby = require('globby');
 var join = require('join-path');
 var syncTree = require('./lib/sync-tree');
@@ -150,86 +149,76 @@ module.exports = function push (options, done) {
           var inodeCount;
           var visitedCount = 0;
 
-          var progressBar;
-
           function verbose() {
             // console.log.apply(console, arguments);
           }
 
           status.emit('data', 'Hashing Directory Contents ...');
           
-          // TODO: emit this as data
           sync.on('inodecount', function(count) {
             
-            process.stdout.write(format.green(' ✔\n'));
-            progressBar = new ProgressBar('Syncing '+ count +' inodes: [' + format.green(':bar') + '] ' + format.bold(':percent') + '', {
-              complete: '=',
-              incomplete: ' ',
-              width: 50,
-              total: count
-            });
-            inodeCount = count;
+            status.emit('file:count', count)
+            status.emit('data', format.green(' ✔\n'));
           });
 
           sync.on('notfound', function(path, hash) {
             
-            verbose(format.red('404 ') + path);
+            status.emit('notfound');
+            // verbose(format.red('404 ') + path);
           });
 
           sync.on('found', function(path, hash, count) {
             
-            verbose(format.green('200 ') + path)
-            visitedCount += count;
-            progressBar.tick(count);
+            status.emit('file:found', count);
+            
+            // verbose(format.green('200 ') + path)
           });
 
           sync.on('cachestart', function(path, hash) {
             
-            verbose(format.blue('PUT ') + path)
+            status.emit('file:cachestart');
+            // verbose(format.blue('PUT ') + path)
           });
 
           sync.on('cachesuccess', function(path, hash, count) {
             
-            verbose(format.green('201 ') + path);
-            visitedCount += 1;
-            progressBar.tick(1);
+            status.emit('file:cachesuccess');
+            
+            // verbose(format.green('201 ') + path);
           });
 
           sync.on('uploadstart', function(path, hash) {
             
-            verbose(format.blue('PUT ') + path);
+            // verbose(format.blue('PUT ') + path);
+            status.emit('upload:start');
           });
 
           sync.on('uploadsuccess', function(path, hash) {
             
-            verbose(format.green('201 ') + path);
-            visitedCount += 1;
-            progressBar.tick(1);
+            status.emit('upload:success');
+            
+            // verbose(format.green('201 ') + path);
           });
 
-          sync.on('uploadfailure', function(error) {
+          sync.on('uploadfailure', function(err) {
             
+            status.emit('upload:failure', err);
           });
 
           sync.on('retry', function(error) {
             
-            visitedCount = 0;
-            
-            status.emit('data', '');
-            status.emit('data', format.red.underline(error.message));
-            status.emit('data', format.green.underline('Retrying...'))
+            status.emit('retry');
           });
 
-          sync.on('error', function(error) {
+          sync.on('error', function(err) {
             
-            status.emit('data', '');
-            status.emit('error', error);
+            // status.emit('data', '');
+            status.emit('error', err);
           });
 
           sync.on('synced', function(fileMap) {
             
-            status.emit('data', format.green('Synced!'));
-            verbose('inodeCount: ' + inodeCount, 'visitedCount: ' + visitedCount);
+            // verbose('inodeCount: ' + inodeCount, 'visitedCount: ' + visitedCount);
             
             var finalizeBuild = api.put(
               'apps',
@@ -276,9 +265,7 @@ module.exports = function push (options, done) {
   function createAppBeforeBuild (config) {
     
     status.emit('data', '\n');
-    // console.log('');
     status.emit('data', 'App does not yet exist. Creating app ' + format.bold(config.name) + ' ... ');
-    // process.stdout.write('App does not yet exist. Creating app ' + format.bold(config.name) + ' ... ');
     
     createApp({name: config.name.toLowerCase()})
       .then(function (res) {
@@ -332,18 +319,7 @@ module.exports = function push (options, done) {
     status.emit('data', 'Application deployed to ' + format.bold.white(environment));
     status.emit('data', 'You can view your app at: ' + format.bold(appUrl));
     
-    done(null, appUrl);
-  }
-  
-  function onError(err) {
-    
-    var errorMessage = err;
-    
-    if (_.isObject(err)) errorMessage = err.error;
-    
-    status.emit('data', '');
-    
-    done(errorMessage);
+    status.emit('done', appUrl);
   }
   
   // Return event emitter
