@@ -40,25 +40,11 @@ module.exports = function push (options, done) {
   
   var createApp = api.post('apps')
   
+  // Use nextTick because we need to listen for events
+  // outside the module before we start emitting the events
   process.nextTick(function () {
     beginDeploy(config);
   });
-  
-  // if (!fs.existsSync(appRootDir)) {
-  //   // return status.emit('error', 'directory does not exist');
-  //   return done(new Error('directory does not exist'));
-  // }
-  
-  // if (environment === 'production') {
-  //   // status.emit('data', '\n' + format.yellow('Note:') + ' Deploying to production purges your application\'s CDN cache, which may take up to one minute.\n');
-  //   console.log('\n' + format.yellow('Note:') + ' Deploying to production purges your application\'s CDN cache, which may take up to one minute.\n');
-  // }
-  
-  // status.emit('data', 'Creating build ... ');
-  // // process.stdout.write('Creating build ... ');
-  
-  // // Start deployment process
-  // deploy(config);
   
   function beginDeploy (config) {
     
@@ -86,27 +72,23 @@ module.exports = function push (options, done) {
         var build = res.body;
         
         // Any other error
-        if (build.status) {
-          return done(res.body.error);
-        }
-        
-        // Does this user have access to this app?
-        if (build.error) {
-          return done(res.body.error);
+        if (build.status || build.error) {
+          return status.emit('error', res.body.error);
         }
         
         // Unexptected error
         if (!build.loadpoint) {
-          console.log('Unexpected build data.');
-          console.log(format.red.underline('====== Build Data Start ======'));
-          console.log(JSON.stringify(build, null, 4));
-          console.log(format.red.underline('====== Build Data End ======'));
-          console.log();
-          return done('Contact support@divshot.com with this data for diagnostic purposes.');
+          status.emit('data', 'Unexpected build data.');
+          status.emit('data', format.red.underline('====== Build Data Start ======'));
+          status.emit('data', JSON.stringify(build, null, 4));
+          status.emit('data', format.red.underline('====== Build Data End ======'));
+          status.emit('data', '');
+          
+          return status.emit('error', 'Contact support@divshot.com with this data for diagnostic purposes.');
         }
         
-        console.log(format.green('✔'));
-        console.log('');
+        status.emit('data', format.green('✔'));
+        status.emit('data', '');
         
         beginUpload(config, build);
       })
@@ -118,10 +100,10 @@ module.exports = function push (options, done) {
         }
         
         if (err.statusCode === 401) {
-          return done(err.body.error);
+          return status.emit('error', err.body.error);
         }
         
-        done((err.body) ? err.body.error: err);
+        status.emit('error', (err.body) ? err.body.error: err);
       });
     
     
@@ -174,8 +156,9 @@ module.exports = function push (options, done) {
             // console.log.apply(console, arguments);
           }
 
-          process.stdout.write('Hashing Directory Contents ...');
-
+          status.emit('data', 'Hashing Directory Contents ...');
+          
+          // TODO: emit this as data
           sync.on('inodecount', function(count) {
             
             process.stdout.write(format.green(' ✔\n'));
@@ -231,24 +214,22 @@ module.exports = function push (options, done) {
           sync.on('retry', function(error) {
             
             visitedCount = 0;
-            console.log('');
-            console.log(format.red.underline(error.message));
-            console.log(format.green.underline('Retrying...'))
+            
+            status.emit('data', '');
+            status.emit('data', format.red.underline(error.message));
+            status.emit('data', format.green.underline('Retrying...'))
           });
 
           sync.on('error', function(error) {
             
-            console.log('');
-            console.log(format.red.underline(error.message));
-            console.log(error.stack);
-            process.exit(1);
+            status.emit('data', '');
+            status.emit('error', error);
           });
 
           sync.on('synced', function(fileMap) {
             
-            console.log(format.green('Synced!'));
+            status.emit('data', format.green('Synced!'));
             verbose('inodeCount: ' + inodeCount, 'visitedCount: ' + visitedCount);
-            
             
             var finalizeBuild = api.put(
               'apps',
@@ -265,26 +246,26 @@ module.exports = function push (options, done) {
               environment
             );
             
-            console.log('');
-            process.stdout.write('Finalizing build ... ');
+            status.emit('data', '');
+            status.emit('data', 'Finalizing build ... ');
             
             finalizeBuild({file_map: fileMap})
               .then(function (res) {
                 
-                console.log(format.green('✔'));
-                process.stdout.write('Releasing build to ' + format.bold(environment) + ' ... ');
+                status.emit('data', format.green('✔'));
+                status.emit('data', 'Releasing build to ' + format.bold(environment) + ' ... ');
                 
                 return releaseBuild({build: build.id})
               })
               .then(function (res) {
                 
-                console.log(format.green('✔'));
+                status.emit('', format.green('✔'));
                 
                 onPushed();
               })
               .catch(function (err) {
                 
-                done((err.body) ? err.body.error: err);
+                status.emit('error', (err.body) ? err.body.error: err);
               });
           });
         });
@@ -294,10 +275,10 @@ module.exports = function push (options, done) {
   
   function createAppBeforeBuild (config) {
     
-    // status.emit('data', '\n');
-    console.log('');
-    // status.emit('data', 'App does not yet exist. Creating app ' + format.bold(config.name) + ' ... ');
-    process.stdout.write('App does not yet exist. Creating app ' + format.bold(config.name) + ' ... ');
+    status.emit('data', '\n');
+    // console.log('');
+    status.emit('data', 'App does not yet exist. Creating app ' + format.bold(config.name) + ' ... ');
+    // process.stdout.write('App does not yet exist. Creating app ' + format.bold(config.name) + ' ... ');
     
     createApp({name: config.name.toLowerCase()})
       .then(function (res) {
@@ -306,7 +287,7 @@ module.exports = function push (options, done) {
       })
       .catch(function (err) {
         
-        done((err.body) ? err.body.error: err);
+        status.emit('error', (err.body) ? err.body.error: err);
       });
   }
   
@@ -347,9 +328,9 @@ module.exports = function push (options, done) {
       ? 'http://' + config.name + '.divshot.io'
       : 'http://' + environment + '.' + config.name + '.divshot.io';
     
-    console.log('');
-    console.log('Application deployed to ' + format.bold.white(environment));
-    console.log('You can view your app at: ' + format.bold(appUrl));
+    status.emit('data', '');
+    status.emit('data', 'Application deployed to ' + format.bold.white(environment));
+    status.emit('data', 'You can view your app at: ' + format.bold(appUrl));
     
     done(null, appUrl);
   }
@@ -360,7 +341,7 @@ module.exports = function push (options, done) {
     
     if (_.isObject(err)) errorMessage = err.error;
     
-    console.log('');
+    status.emit('data', '');
     
     done(errorMessage);
   }
