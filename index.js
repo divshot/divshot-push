@@ -60,11 +60,7 @@ module.exports = function push (options) {
       return status.emit('error', 'directory does not exist');
     }
     
-    if (environment === 'production') {
-      status.emit('log', '\n' + format.yellow('Note:') + ' Deploying to production purges your application\'s CDN cache, which may take up to one minute.\n');
-    }
-    
-    status.emit('log', 'Creating build ... ');
+    status.emit('build:start');
     
     // Start deployment process
     deploy(config);
@@ -86,17 +82,17 @@ module.exports = function push (options) {
         
         // Unexptected error
         if (!build.loadpoint) {
-          status.emit('log', 'Unexpected build data.\n');
-          status.emit('log', format.red.underline('====== Build Data Start ======\n'));
-          status.emit('log', JSON.stringify(build, null, 4) + '\n');
-          status.emit('log', format.red.underline('====== Build Data End ======\n'));
-          status.emit('log', '');
+          var errorMsg = '';
+          errorMsg += 'Unexpected build data.\n';
+          errorMsg += format.red.underline('====== Build Data Start ======\n');
+          errorMsg += JSON.stringify(build, null, 4) + '\n';
+          errorMsg += format.red.underline('====== Build Data End ======\n');
+          errorMsg += '\nContact support@divshot.com with this data for diagnostic purposes.';
           
-          return status.emit('error', 'Contact support@divshot.com with this data for diagnostic purposes.');
+          return status.emit('error', errorMsg);
         }
         
-        status.emit('log', format.green('✔') + '\n');
-        
+        status.emit('build:end', build);
         startUpload(config, build);
       })
       .catch(function (err) {
@@ -118,7 +114,7 @@ module.exports = function push (options) {
     
     function startUpload (config, build) {
       
-      status.emit('log', 'Hashing Directory Contents ...');
+      status.emit('hashing:start');
       
       tmp.dir({unsafeCleanup: true}, function(err, tmpDir) {
         
@@ -158,7 +154,7 @@ module.exports = function push (options) {
 
           sync.on('inodecount', function(count) {
             
-            status.emit('log', format.green(' ✔') + '\n');
+            status.emit('hashing:end');            
             status.emit('file:count', count);
             status.emit('upload:start', count);
           });
@@ -232,31 +228,29 @@ module.exports = function push (options) {
               environment
             );
             
-            status.emit('log', '\n');
-            status.emit('log', 'Finalizing build ... ');
+            status.emit('finalize:start');
             
             finalizeBuild({file_map: fileMap})
               .then(function (res) {
                 
-                status.emit('log', format.green('✔') + '\n');
-                status.emit('log', 'Releasing build to ' + format.bold(environment) + ' ... ');
+                status.emit('finalize:end');
+                status.emit('release:start', environment);
                 
                 return releaseBuild({build: build.id})
               })
               .then(function (res) {
                 
-                status.emit('log', format.green('✔') + '\n');
+                status.emit('release:end');
                 
                 // TODO: should not hard code this
                 var appUrl = (environment === 'production') 
                   ? 'http://' + config.name + '.divshot.io'
                   : 'http://' + environment + '.' + config.name + '.divshot.io';
                 
-                status.emit('log', '\n');
-                status.emit('log', 'Application deployed to ' + format.bold.white(environment) + '\n');
-                status.emit('log', 'You can view your app at: ' + format.bold(appUrl) + '\n');
-                
-                status.emit('end', appUrl);
+                status.emit('end', {
+                  url: appUrl,
+                  environment: environment
+                });
               })
               .catch(function (err) {
                 
@@ -270,12 +264,12 @@ module.exports = function push (options) {
   
   function createAppBeforeBuild (config) {
     
-    status.emit('log', '\n');
-    status.emit('log', 'App does not yet exist. Creating app ' + format.bold(config.name) + ' ... ');
+    status.emit('app:create', config.name);
     
     createApp({name: config.name.toLowerCase()})
       .then(function (res) {
         
+        status.emit('app:end', res.body);
         deploy(config);
       })
       .catch(function (err) {
