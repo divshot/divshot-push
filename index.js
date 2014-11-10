@@ -8,18 +8,22 @@ var async = require('async');
 var tmp = require('tmp');
 var globby = require('globby');
 var join = require('join-path');
-var syncTree = require('./lib/sync-tree');
 var ask = require('ask');
 var asArray = require('as-array');
+var isDirectory = require('is-directory');
+
+var statusHandler = require('./lib/status-handler');
+var syncTree = require('./lib/sync-tree');
 
 var DIVSHOT_API_VERSION = '0.5.0';
 var DIVSHOT_API_HOST = 'https://api.divshot.com';
 var DEFAULT_ENVIRONMENT = 'development';
+var DEFAULT_AWS_REGION = 'us-east-1';
 
 module.exports = function push (options) {
   
   // Set up status events
-  var status = new EventEmitter();
+  var status = statusHandler();
   
   // Ensure required data
   assert.ok(options.config, '[divshot-push]: Application configuration data is required');
@@ -59,10 +63,10 @@ module.exports = function push (options) {
     }
     
     if (environment === 'production') {
-      status.emit('data', '\n' + format.yellow('Note:') + ' Deploying to production purges your application\'s CDN cache, which may take up to one minute.\n');
+      status.emit('log', '\n' + format.yellow('Note:') + ' Deploying to production purges your application\'s CDN cache, which may take up to one minute.\n');
     }
     
-    status.emit('data', 'Creating build ... ');
+    status.emit('log', 'Creating build ... ');
     
     // Start deployment process
     deploy(config);
@@ -84,17 +88,16 @@ module.exports = function push (options) {
         
         // Unexptected error
         if (!build.loadpoint) {
-          status.emit('data', 'Unexpected build data.');
-          status.emit('data', format.red.underline('====== Build Data Start ======'));
-          status.emit('data', JSON.stringify(build, null, 4));
-          status.emit('data', format.red.underline('====== Build Data End ======'));
-          status.emit('data', '');
+          status.emit('log', 'Unexpected build data.\n');
+          status.emit('log', format.red.underline('====== Build Data Start ======\n'));
+          status.emit('log', JSON.stringify(build, null, 4) + '\n');
+          status.emit('log', format.red.underline('====== Build Data End ======\n'));
+          status.emit('log', '');
           
           return status.emit('error', 'Contact support@divshot.com with this data for diagnostic purposes.');
         }
         
-        status.emit('data', format.green('✔'));
-        status.emit('data', '');
+        status.emit('log', format.green('✔') + '\n');
         
         startUpload(config, build);
       })
@@ -116,6 +119,8 @@ module.exports = function push (options) {
     // 4. Copy files (minus exclusions) to a tmp dir
     
     function startUpload (config, build) {
+      
+      status.emit('log', 'Hashing Directory Contents ...');
       
       tmp.dir({unsafeCleanup: true}, function(err, tmpDir) {
         
@@ -143,7 +148,7 @@ module.exports = function push (options) {
               secretAccessKey: authorization.secret,
               accessKeyId: authorization.key,
               sessionToken: authorization.token,
-              region: 'us-east-1',
+              region: DEFAULT_AWS_REGION,
               httpOptions: {
                 timeout: timeout
               }
@@ -153,12 +158,11 @@ module.exports = function push (options) {
             prefix: build.application_id
           });
 
-          status.emit('data', 'Hashing Directory Contents ...');
-          
           sync.on('inodecount', function(count) {
             
-            status.emit('file:count', count)
-            status.emit('data', format.green(' ✔\n'));
+            status.emit('log', format.green(' ✔') + '\n');
+            status.emit('file:count', count);
+            status.emit('upload:start', count);
           });
 
           sync.on('notfound', function(path, hash) {
@@ -170,30 +174,28 @@ module.exports = function push (options) {
           sync.on('found', function(path, hash, count) {
             
             status.emit('file:found', count);
-            verbose(format.green('200 ') + path)
+            status.emit('upload:progress', count);
+            verbose(format.green('200 ') + path);
           });
 
           sync.on('cachestart', function(path, hash) {
             
             status.emit('file:cachestart');
-            verbose(format.blue('PUT ') + path)
+            verbose(format.blue('PUT ') + path);
           });
 
           sync.on('cachesuccess', function(path, hash, count) {
             
             status.emit('file:cachesuccess');
+            status.emit('upload:progress', 1);
             verbose(format.green('201 ') + path);
-          });
-
-          sync.on('uploadstart', function(path, hash) {
-            
-            status.emit('upload:start');
-            verbose(format.blue('PUT ') + path);
           });
 
           sync.on('uploadsuccess', function(path, hash) {
             
             status.emit('upload:success');
+            status.emit('upload:progress', 1);
+            status.emit('upload:end');
             verbose(format.green('201 ') + path);
           });
 
@@ -214,6 +216,9 @@ module.exports = function push (options) {
 
           sync.on('synced', function(fileMap) {
             
+            status.emit('upload:start', Object.keys(fileMap).length);
+            status.emit('upload:end');
+            
             var finalizeBuild = api.put(
               'apps',
               config.name.toLowerCase(),
@@ -229,31 +234,31 @@ module.exports = function push (options) {
               environment
             );
             
-            status.emit('data', '');
-            status.emit('data', 'Finalizing build ... ');
+            status.emit('log', '\n');
+            status.emit('log', 'Finalizing build ... ');
             
             finalizeBuild({file_map: fileMap})
               .then(function (res) {
                 
-                status.emit('data', format.green('✔'));
-                status.emit('data', 'Releasing build to ' + format.bold(environment) + ' ... ');
+                status.emit('log', format.green('✔') + '\n');
+                status.emit('log', 'Releasing build to ' + format.bold(environment) + ' ... ');
                 
                 return releaseBuild({build: build.id})
               })
               .then(function (res) {
                 
-                status.emit('', format.green('✔'));
+                status.emit('log', format.green('✔') + '\n');
                 
                 // TODO: should not hard code this
                 var appUrl = (environment === 'production') 
                   ? 'http://' + config.name + '.divshot.io'
                   : 'http://' + environment + '.' + config.name + '.divshot.io';
                 
-                status.emit('data', '');
-                status.emit('data', 'Application deployed to ' + format.bold.white(environment));
-                status.emit('data', 'You can view your app at: ' + format.bold(appUrl));
+                status.emit('log', '\n');
+                status.emit('log', 'Application deployed to ' + format.bold.white(environment) + '\n');
+                status.emit('log', 'You can view your app at: ' + format.bold(appUrl) + '\n');
                 
-                status.emit('done', appUrl);
+                status.emit('end', appUrl);
               })
               .catch(function (err) {
                 
@@ -267,8 +272,8 @@ module.exports = function push (options) {
   
   function createAppBeforeBuild (config) {
     
-    status.emit('data', '\n');
-    status.emit('data', 'App does not yet exist. Creating app ' + format.bold(config.name) + ' ... ');
+    status.emit('log', '\n');
+    status.emit('log', 'App does not yet exist. Creating app ' + format.bold(config.name) + ' ... ');
     
     createApp({name: config.name.toLowerCase()})
       .then(function (res) {
@@ -303,12 +308,6 @@ module.exports = function push (options) {
     }
     
     return globby.sync(globs);
-  }
-  
-  function isDirectory (pathname) {
-    
-    return fs.existsSync(pathname)
-      && fs.statSync(pathname).isDirectory();
   }
   
   // Handle verbose data for debugging
