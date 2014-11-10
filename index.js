@@ -3,17 +3,14 @@ var path = require('path');
 var EventEmitter = require('events').EventEmitter;
 var assert = require('assert');
 var format = require('chalk');
-var glob = require('glob');
 var async = require('async');
 var tmp = require('tmp');
-var globby = require('globby');
-var join = require('join-path');
 var ask = require('ask');
 var asArray = require('as-array');
-var isDirectory = require('is-directory');
 
 var statusHandler = require('./lib/status-handler');
 var syncTree = require('./lib/sync-tree');
+var filesToUpload = require('./lib/files-to-upload');
 
 var DIVSHOT_API_VERSION = '0.5.0';
 var DIVSHOT_API_HOST = 'https://api.divshot.com';
@@ -48,11 +45,12 @@ module.exports = function push (options) {
     }
   });
   
-  var createApp = api.post('apps')
+  var createApp = api.post('apps');
   
   // Use nextTick because we need to listen for events
   // outside the module before we start emitting the events
   process.nextTick(function () {
+    
     startDeploy(config);
   });
   
@@ -286,32 +284,9 @@ module.exports = function push (options) {
       });
   }
   
-  function filesToUpload (appRootDir, filesToExclude) {
-    
-    // 1. glob directory appRootDir
-    // 2. array subtract globs of config.excludes
-    
-    var globs = [appRootDir + "/**"];
-    
-    if (filesToExclude) {
-      filesToExclude.forEach(function(excludeGlob) {
-        
-        var pathname = join(appRootDir, excludeGlob);
-        var excludePath = join('!' + appRootDir, excludeGlob);
-        
-        if (isDirectory(pathname)) {
-          excludePath += path.sep + '**';
-        }
-        
-        globs.push(excludePath);
-      });
-    }
-    
-    return globby.sync(globs);
-  }
-  
   // Handle verbose data for debugging
   function verbose() {
+    
     status.emit('verbose', asArray(arguments));
   }
   
