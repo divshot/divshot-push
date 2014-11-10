@@ -196,11 +196,12 @@ module.exports = function push (options) {
           sync.on('uploadfailure', function(err) {
             
             status.emit('upload:failure', err);
+            status.emit('upload:error', err);
           });
 
           sync.on('retry', function(error) {
             
-            status.emit('retry');
+            status.emit('upload:retry');
           });
 
           sync.on('error', function(err) {
