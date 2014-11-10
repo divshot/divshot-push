@@ -16,6 +16,7 @@ var DIVSHOT_API_VERSION = '0.5.0';
 var DIVSHOT_API_HOST = 'https://api.divshot.com';
 var DEFAULT_ENVIRONMENT = 'development';
 var DEFAULT_AWS_REGION = 'us-east-1';
+var DEFAULT_AWS_BUCKET = 'divshot-io-hashed-production';
 
 module.exports = function push (options) {
   
@@ -31,6 +32,7 @@ module.exports = function push (options) {
   var config = options.config;
   var token = options.token;
   var timeout = options.timeout;
+  var awsBucket = (options.bucket) ? options.hosting.bucket || DEFAULT_AWS_BUCKET : DEFAULT_AWS_BUCKET;
   var appConfigRootPath = (config.root && config.root === '/') ? './' : config.root;
   var appRootDir = path.resolve(options.root || '/', appConfigRootPath);
   var apiHost = (options.hosting) ? options.hosting.api.host || DIVSHOT_API_HOST : DIVSHOT_API_HOST;
@@ -148,7 +150,7 @@ module.exports = function push (options) {
               }
             },
             directory: [tmpDir, build.id].join('/'),
-            bucket: process.env.DIVSHOT_HASHED_BUCKET,
+            bucket: process.env.DIVSHOT_HASHED_BUCKET || awsBucket,
             prefix: build.application_id
           });
 
