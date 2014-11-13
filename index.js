@@ -33,7 +33,7 @@ module.exports = function push (options) {
   var token = options.token;
   var timeout = options.timeout;
   var awsBucket = (options.bucket) ? options.hosting.bucket || DEFAULT_AWS_BUCKET : DEFAULT_AWS_BUCKET;
-  var appConfigRootPath = (config.root && config.root === '/') ? './' : config.root;
+  var appConfigRootPath = (config.root && config.root === '/') ? './' : config.root || './';
   var appRootDir = path.resolve(options.root || '/', appConfigRootPath);
   var apiHost = (options.hosting) ? options.hosting.api.host || DIVSHOT_API_HOST : DIVSHOT_API_HOST;
   var apiVersion = (options.hosting) ? options.hosting.api.version || DIVSHOT_API_VERSION : DIVSHOT_API_VERSION;

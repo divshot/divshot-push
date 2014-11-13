@@ -1,6 +1,6 @@
 {
   "name": "divshot-push",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Deploy files to the Divshot hosting platform",
   "main": "index.js",
   "directories": {
