@@ -201,9 +201,9 @@ module.exports = function push (options) {
             status.emit('upload:error', err);
           });
 
-          sync.on('retry', function(error) {
+          sync.on('retry', function(err) {
             
-            status.emit('upload:retry');
+            status.emit('upload:retry', err);
           });
 
           sync.on('error', function(err) {
