@@ -1,6 +1,6 @@
 {
   "name": "divshot-push",
-  "version": "1.0.3",
+  "version": "1.2.0",
   "description": "Deploy files to the Divshot hosting platform",
   "main": "index.js",
   "directories": {
@@ -31,10 +31,11 @@
   },
   "dependencies": {
     "as-array": "^1.0.0",
-    "ask": "^1.1.0",
+    "ask": "^1.4.0",
     "async": "^0.9.0",
     "aws-sdk": "^2.0.23",
     "chalk": "^0.5.1",
+    "divshot-dumper": "1.1.0",
     "fs-extra": "^0.12.0",
     "globby": "^0.1.1",
     "graceful-fs": "^3.0.4",

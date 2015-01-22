@@ -7,6 +7,7 @@ var async = require('async');
 var tmp = require('tmp');
 var ask = require('ask');
 var asArray = require('as-array');
+var dumper = require('divshot-dumper');
 
 var statusHandler = require('./lib/status-handler');
 var syncTree = require('./lib/sync-tree');
@@ -46,6 +47,9 @@ module.exports = function push (options) {
       'Accept-Version': apiVersion
     }
   });
+  
+  // Log output on error
+  dumper(api.events);
   
   var createApp = api.post('apps');
   
