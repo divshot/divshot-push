@@ -43,6 +43,7 @@ pushStatus.onUpload('end', function () {
   * `token` - REQUIRED: User authentication token.
   * `environment` - OPTIONAL: Environment to push to. Defaults to `development`.
   * `timeout` - OPTIONAL: API http request timeout.
+  * `cacheDirectory` - OPTIONAL: name of directory to store the caching hash files. Defaults to `.divshot-cache/deploy`
 
 ### Push Status Events
 
