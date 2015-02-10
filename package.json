@@ -1,6 +1,6 @@
 {
   "name": "divshot-push",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Deploy files to the Divshot hosting platform",
   "main": "index.js",
   "directories": {
@@ -36,12 +36,12 @@
     "aws-sdk": "^2.0.23",
     "chalk": "^0.5.1",
     "divshot-dumper": "1.1.0",
-    "fs-extra": "^0.12.0",
-    "globby": "^0.1.1",
+    "fs-extra": "^0.16.3",
+    "globby": "^1.1.0",
     "graceful-fs": "^3.0.4",
     "is-directory": "^0.2.2",
     "join-path": "^1.0.0",
-    "merkle-dir": "git://github.com/divshot/merkle-dir",
+    "merkle-dir": "divshot/merkle-dir",
     "mkdirp": "^0.5.0",
     "retry": "^0.6.1",
     "slash": "^1.0.0",
