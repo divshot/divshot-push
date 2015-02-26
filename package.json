@@ -25,9 +25,6 @@
   },
   "homepage": "https://github.com/divshot/divshot-push",
   "devDependencies": {
-    "chai": "^1.9.2",
-    "jshint": "^2.5.10",
-    "mocha": "^2.0.1"
   },
   "dependencies": {
     "as-array": "^1.0.0",
