@@ -22,7 +22,7 @@ var CACHE_DIRECTORY = '.divshot-cache/deploy';
 
 module.exports = function push (options) {
   
-  // Set up status events
+  // Set up status events stream
   var status = statusHandler();
   
   // Ensure required data
@@ -65,7 +65,7 @@ module.exports = function push (options) {
   function startDeploy (config) {
     
     if (!fs.existsSync(appRootDir)) {
-      return status.emit('error', 'directory does not exist');
+      return status.emit('error', 'The directory ' + format.bold(appRootDir) + ' does not exist');
     }
     
     status.emit('build:start');
